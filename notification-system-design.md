@@ -1051,3 +1051,127 @@ The synchronous approach is not suitable for large-scale notification delivery. 
 
 
 
+# Stage 6
+
+## 1. Problem Understanding
+
+The system must display the **top 10 most important unread notifications** by combining:
+
+* Priority (Placement > Result > Event)
+* Recency (newer notifications first)
+
+New notifications keep arriving, so the solution must support continuous updates efficiently.
+
+---
+
+## 2. Approach
+
+To solve this:
+
+* Fetch notifications from the given API
+* Assign weight based on type:
+
+  * Placement → 3
+  * Result → 2
+  * Event → 1
+* Combine:
+
+  * Priority weight
+  * Timestamp (recency)
+* Sort using a composite score
+* Maintain only **top 10 using a heap**
+
+This avoids sorting the entire dataset every time.
+
+---
+
+## 3. Python Implementation
+
+```python id="st6_code"
+import requests
+from heapq import nlargest
+from datetime import datetime
+
+API_URL = "http://4.224.186.213/evaluation-service/notifications"
+
+PRIORITY_WEIGHT = {
+    "Placement": 3,
+    "Result": 2,
+    "Event": 1
+}
+
+def parse_time(ts):
+    return datetime.strptime(ts, "%Y-%m-%d %H:%M:%S")
+
+def score(notification):
+    type_weight = PRIORITY_WEIGHT.get(notification["Type"], 0)
+    time_weight = parse_time(notification["Timestamp"]).timestamp()
+    return (type_weight * 1000000) + time_weight
+
+def fetch_notifications():
+    response = requests.get(API_URL)
+    if response.status_code == 200:
+        return response.json()["notifications"]
+    return []
+
+def get_top_10_notifications():
+    notifications = fetch_notifications()
+
+    top_10 = nlargest(10, notifications, key=score)
+
+    return top_10
+
+
+if __name__ == "__main__":
+    top_notifications = get_top_10_notifications()
+
+    for n in top_notifications:
+        print(n["ID"], n["Type"], n["Message"], n["Timestamp"])
+```
+
+---
+
+## 4. How Top 10 is Maintained Efficiently
+
+Instead of sorting all notifications every time:
+
+* A **heap (priority queue)** is used
+* Only top 10 elements are kept in memory
+* New notifications can be compared and inserted in **O(log n)**
+
+This makes the system scalable even when notifications keep increasing.
+
+---
+
+## 5. Tradeoffs
+
+### Advantages
+
+* Efficient for large datasets
+* No full sorting required
+* Works well with streaming updates
+* Memory efficient
+
+### Disadvantages
+
+* Slight complexity increase
+* Requires correct scoring function tuning
+* Timestamp + priority balancing must be carefully designed
+
+---
+
+## 6. Real-Time Improvement Idea
+
+For production systems:
+
+* Maintain a live heap in memory
+* Update heap when new notifications arrive via WebSocket
+* Avoid re-fetching entire API repeatedly
+
+This keeps the top 10 always updated in real time.
+
+---
+
+## 7. Conclusion
+
+This approach ensures that the most important and recent notifications are always displayed efficiently, while keeping computation optimized using a heap-based top-k selection strategy.
