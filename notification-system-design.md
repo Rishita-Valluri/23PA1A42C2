@@ -891,3 +891,163 @@ By introducing caching and real-time communication, the notification system beco
 
 
 
+# Stage 5
+
+## 1. Problem in Current Design
+
+The given implementation processes notifications in a **synchronous loop**:
+
+```pseudo
+for student_id in student_ids:
+    send_email(student_id, message)
+    save_to_db(student_id, message)
+    push_to_app(student_id, message)
+```
+
+### Key Issues
+
+* **Blocking execution:** Each student is processed one by one, making the system slow.
+* **No scalability:** 50,000 users will cause major delay and timeout risk.
+* **Partial failure risk:** If email fails midway (e.g., 200 users), system continues without proper recovery handling.
+* **No retry mechanism:** Failed email deliveries are not retried.
+* **Tight coupling:** Email, DB, and push notification are all tightly connected in one flow.
+* **Uneven performance:** Email API latency affects entire system performance.
+
+---
+
+## 2. What Happens When Email Fails Midway?
+
+If `send_email()` fails for some users:
+
+* Those users will not receive notifications.
+* DB inserts and push notifications may still proceed inconsistently.
+* System has **no tracking of failure state**.
+* No automatic retry or recovery mechanism exists.
+
+This leads to **data inconsistency and unreliable delivery**.
+
+---
+
+## 3. Should DB Save and Email Sending Happen Together?
+
+No, they should NOT be tightly coupled.
+
+### Reason:
+
+* Database persistence is **source of truth**
+* Email delivery is a **best-effort external operation**
+* Combining both makes the system slow and unreliable
+
+Instead:
+
+* Save data first
+* Process delivery asynchronously
+
+---
+
+## 4. Proposed Solution (Redesigned System)
+
+To improve reliability and performance, the system should use:
+
+* **Message Queue (RabbitMQ)**
+* **Background Workers**
+* **Retry + Dead Letter Queue (DLQ)**
+
+---
+
+## 5. Improved Design Approach
+
+### Flow
+
+1. API receives request for bulk notification
+2. Notifications are saved in database
+3. Each notification event is published to RabbitMQ
+4. Worker services consume messages asynchronously
+5. Workers handle:
+
+   * Email sending
+   * In-app push notification
+6. Failures are retried automatically
+7. Persistent failures go to DLQ
+
+---
+
+## 6. Revised Pseudocode
+
+```pseudo id="st5_code"
+function notify_all(student_ids, message):
+
+    for student_id in student_ids:
+
+        notification = {
+            student_id: student_id,
+            message: message,
+            status: "PENDING"
+        }
+
+        save_to_db(notification)
+
+        publish_to_queue("notification_queue", notification)
+```
+
+---
+
+### Worker Service
+
+```pseudo id="st5_worker"
+function process_queue_message(notification):
+
+    try:
+        send_email(notification.student_id, notification.message)
+        push_to_app(notification.student_id, notification.message)
+
+        update_db_status(notification.id, "SENT")
+
+    catch error:
+        retry_count = get_retry_count(notification.id)
+
+        if retry_count < MAX_RETRIES:
+            requeue(notification)
+        else:
+            send_to_dead_letter_queue(notification)
+            update_db_status(notification.id, "FAILED")
+```
+
+---
+
+## 7. Why This Design is Better
+
+* Non-blocking API requests
+* High scalability for 50,000+ users
+* Independent worker scaling
+* Reliable retry mechanism
+* Fault isolation using DLQ
+* Faster user response time
+
+---
+
+## 8. Tradeoffs
+
+### Advantages
+
+* High performance under load
+* Better reliability
+* Failure isolation
+* Easier horizontal scaling
+
+### Disadvantages
+
+* Increased system complexity
+* Requires queue infrastructure (RabbitMQ)
+* Debugging becomes slightly harder
+* Eventual consistency instead of immediate consistency
+
+---
+
+## 9. Final Conclusion
+
+The synchronous approach is not suitable for large-scale notification delivery. By introducing asynchronous processing using a message queue and worker system, the platform becomes scalable, fault-tolerant, and production-ready.
+
+
+
+
