@@ -398,3 +398,199 @@ WebSocket
 * Real-time delivery using WebSocket technology.
 * Standardized response structure across all endpoints.
 * Scalable design suitable for large user bases.
+
+
+
+# Stage 2
+
+## 1. Database Selection
+
+For the alert/notification system defined in Stage 1, **MongoDB** is chosen as the primary database for persistent storage.
+
+### Reason for Selection
+
+MongoDB is suitable for this system because:
+
+* It stores data in flexible document format (BSON).
+* Supports high-speed write operations for frequent alerts.
+* Scales horizontally using sharding.
+* Schema can evolve without downtime.
+* Works efficiently with Node.js backend used in Stage 1 design.
+
+---
+
+## 2. Database Schema Design
+
+The system uses two main collections:
+
+---
+
+### 2.1 Users Collection
+
+```json id="u1"
+{
+  "_id": "ObjectId",
+  "name": "Student Name",
+  "email": "student@college.edu",
+  "createdAt": "2026-06-25T10:00:00Z"
+}
+```
+
+---
+
+### 2.2 Alerts Collection
+
+```json id="u2"
+{
+  "_id": "ObjectId",
+  "userId": "ObjectId",
+  "category": "Academic",
+  "title": "Assignment Deadline",
+  "message": "ML assignment submission ends tomorrow",
+  "priority": "high",
+  "isRead": false,
+  "createdAt": "2026-06-25T10:05:00Z"
+}
+```
+
+---
+
+## 3. Data Relationship
+
+* One user can have multiple alerts.
+* Each alert belongs to exactly one user.
+* Relationship is maintained using `userId`.
+
+```
+User
+  │
+  ├── Alert
+  ├── Alert
+  └── Alert
+```
+
+---
+
+## 4. Indexing Strategy
+
+To improve query performance in large datasets, indexes are created on frequently accessed fields:
+
+```javascript id="u3"
+db.alerts.createIndex({ userId: 1 })
+
+db.alerts.createIndex({ userId: 1, isRead: 1 })
+
+db.alerts.createIndex({ category: 1 })
+
+db.alerts.createIndex({ createdAt: -1 })
+```
+
+### Purpose
+
+* Faster retrieval of user alerts
+* Efficient filtering of read/unread alerts
+* Quick sorting by latest alerts
+
+---
+
+## 5. Scalability Challenges
+
+As the number of alerts increases, the following issues may occur:
+
+* Slower query response due to large datasets
+* High memory usage during pagination
+* Increased load on database during peak traffic
+* Sorting overhead on large collections
+
+---
+
+## 6. Solutions for Scaling
+
+To handle large-scale usage:
+
+* Use **pagination (limit/skip)** to avoid loading full datasets
+* Apply **proper indexing** on frequently queried fields
+* Move old alerts to an **archive collection**
+* Use **sharding** to distribute data across servers
+* Add **Redis caching** for frequently accessed alerts
+* Use read replicas for scaling read operations
+
+---
+
+## 7. Database Queries
+
+---
+
+### 7.1 Get Alerts for a User (Paginated)
+
+```javascript id="u4"
+db.alerts.find({ userId: ObjectId(userId) })
+.sort({ createdAt: -1 })
+.skip(0)
+.limit(10)
+```
+
+---
+
+### 7.2 Get Single Alert
+
+```javascript id="u5"
+db.alerts.findOne({
+  _id: ObjectId(alertId)
+})
+```
+
+---
+
+### 7.3 Create Alert
+
+```javascript id="u6"
+db.alerts.insertOne({
+  userId: ObjectId(userId),
+  category: "Academic",
+  title: "Assignment Deadline",
+  message: "ML assignment submission ends tomorrow",
+  priority: "high",
+  isRead: false,
+  createdAt: new Date()
+})
+```
+
+---
+
+### 7.4 Mark Alert as Read
+
+```javascript id="u7"
+db.alerts.updateOne(
+  { _id: ObjectId(alertId) },
+  { $set: { isRead: true } }
+)
+```
+
+---
+
+### 7.5 Mark All Alerts as Read
+
+```javascript id="u8"
+db.alerts.updateMany(
+  { userId: ObjectId(userId) },
+  { $set: { isRead: true } }
+)
+```
+
+---
+
+### 7.6 Delete Alert
+
+```javascript id="u9"
+db.alerts.deleteOne({
+  _id: ObjectId(alertId)
+})
+```
+
+---
+
+## 8. Summary
+
+MongoDB provides a flexible and scalable storage layer for the alert system designed in Stage 1. With proper indexing, pagination, caching, and archiving strategies, the system can handle large-scale notification traffic efficiently while maintaining fast response times.
+
