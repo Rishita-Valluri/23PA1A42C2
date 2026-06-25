@@ -753,3 +753,141 @@ This helps in:
 ## 9. Summary
 
 The original query is functionally correct but not optimized for large-scale data. Proper indexing, selective column retrieval, and avoiding full table scans are essential for maintaining performance in a growing notification system.
+
+
+
+
+# Stage 4
+
+## 1. Problem Statement
+
+In the current system, notifications are being fetched from the database on every page load for each student. As the number of users and notifications increases, this leads to:
+
+* High database load
+* Increased response time
+* Poor user experience during peak traffic
+
+To solve this, a performance optimization strategy is required.
+
+---
+
+## 2. Proposed Solution Overview
+
+To improve system performance, I would introduce:
+
+* **Redis (Caching Layer)** for reducing repeated database reads
+* **Socket.IO (Real-Time Communication)** for instant notification delivery
+
+This combination reduces database dependency and improves responsiveness.
+
+---
+
+## 3. Caching Strategy (Redis)
+
+### Why Caching is Needed
+
+Repeated fetching of the same notifications from the database is inefficient. Redis stores frequently accessed data in memory, which significantly reduces latency.
+
+---
+
+### Cache Flow
+
+1. User requests notifications
+2. System checks Redis cache first
+3. If data exists (**cache hit**) → return immediately
+4. If data does not exist (**cache miss**) → fetch from database
+5. Store result in Redis for future requests
+
+---
+
+### Cache Invalidation Strategy
+
+To ensure data consistency:
+
+1. Update database first
+2. Remove or update Redis cache for that user
+3. Next request repopulates cache with fresh data
+
+This ensures users always see updated notifications.
+
+---
+
+### Tradeoffs of Caching
+
+**Advantages:**
+
+* Faster response time
+* Reduced database load
+* Better scalability
+
+**Disadvantages:**
+
+* Risk of stale data if cache is not updated properly
+* Additional system complexity
+* Memory overhead for Redis storage
+
+---
+
+## 4. Real-Time Delivery (Socket.IO)
+
+### Purpose
+
+Instead of waiting for page refresh, notifications should be pushed instantly to users.
+
+---
+
+### Flow
+
+1. User logs into the system
+2. Socket connection is established
+3. Server stores new notification in database
+4. Cache is invalidated for that user
+5. Server emits `new-notification` event
+6. Client receives and updates UI instantly
+
+---
+
+### Tradeoffs of Real-Time System
+
+**Advantages:**
+
+* Instant updates
+* Better user experience
+* No need for manual refresh
+
+**Disadvantages:**
+
+* Requires persistent connections
+* Slight increase in server resource usage
+* More complex infrastructure setup
+
+---
+
+## 5. Combined System Benefits
+
+Using Redis + Socket.IO together provides a balanced architecture:
+
+* Redis handles **fast data retrieval**
+* Socket.IO handles **instant delivery**
+* Database remains source of truth
+
+---
+
+## 6. Final Architecture Impact
+
+This approach improves system performance in the following ways:
+
+* Reduces repeated database queries
+* Handles high concurrent users efficiently
+* Ensures real-time notification delivery
+* Maintains data consistency with cache invalidation
+* Improves scalability for future growth
+
+---
+
+## 7. Conclusion
+
+By introducing caching and real-time communication, the notification system becomes more scalable, responsive, and user-friendly. The tradeoff is increased system complexity, but the performance benefits outweigh the additional overhead in large-scale usage scenarios.
+
+
+
