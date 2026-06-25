@@ -594,3 +594,162 @@ db.alerts.deleteOne({
 
 MongoDB provides a flexible and scalable storage layer for the alert system designed in Stage 1. With proper indexing, pagination, caching, and archiving strategies, the system can handle large-scale notification traffic efficiently while maintaining fast response times.
 
+
+
+# Stage 3
+
+## 1. Query Evaluation
+
+The given query is used to fetch all unread notifications for a specific student:
+
+```sql
+SELECT *
+FROM notifications
+WHERE student_id = 1042
+AND is_read = FALSE
+ORDER BY created_at ASC;
+```
+
+### Functional Check
+
+The query is correct in terms of output. It successfully returns all unread notifications for the given student and sorts them by creation time.
+
+However, when the dataset grows large, this query will not scale efficiently.
+
+---
+
+## 2. Performance Issues
+
+### 2.1 Selecting All Columns
+
+Using `SELECT *` retrieves unnecessary fields from the table.
+
+In a real notification system, the UI only needs limited fields like title, message, and timestamp. Fetching extra data increases memory usage and network overhead.
+
+---
+
+### 2.2 Missing Effective Indexing
+
+If proper indexes are not defined, the database performs a full table scan to filter records.
+
+With millions of notifications, this becomes very slow.
+
+---
+
+### 2.3 Sorting Cost
+
+The query sorts results using `created_at`.
+
+If this column is not part of an index, the database performs an additional sorting step after filtering, which increases execution time.
+
+---
+
+## 3. Improved Query
+
+A better approach is to fetch only required fields:
+
+```sql
+SELECT
+    id,
+    title,
+    message,
+    type,
+    created_at
+FROM notifications
+WHERE student_id = 1042
+AND is_read = FALSE
+ORDER BY created_at ASC;
+```
+
+This reduces data transfer and improves response time.
+
+---
+
+## 4. Recommended Index
+
+To optimize performance, a composite index should be used:
+
+```sql
+CREATE INDEX idx_notifications_user_read_time
+ON notifications(student_id, is_read, created_at);
+```
+
+### Benefit
+
+* Quickly filters notifications for a specific user
+* Efficiently finds unread records
+* Maintains sorted order using index itself
+
+---
+
+## 5. Time Complexity
+
+### Without Index
+
+* Full table scan: **O(n)**
+* Sorting: **O(n log n)**
+
+This becomes slow as the number of notifications increases.
+
+---
+
+### With Index
+
+* Lookup: **O(log n)**
+* Retrieval: proportional to result size
+* Sorting is mostly avoided due to indexed order
+
+---
+
+## 6. On Indexing Every Column
+
+Adding indexes on every column is not a good idea.
+
+### Problems:
+
+* Increases storage usage
+* Slows down INSERT/UPDATE/DELETE operations
+* Database optimizer ignores unnecessary indexes
+* Maintenance becomes expensive
+
+### Better Approach:
+
+Create indexes only on columns used frequently in:
+
+* filtering
+* sorting
+* joining
+
+---
+
+## 7. Query for Placement Notifications (Last 7 Days)
+
+To fetch students who received placement notifications recently:
+
+```sql
+SELECT DISTINCT student_id
+FROM notifications
+WHERE notification_type = 'Placement'
+AND created_at >= NOW() - INTERVAL 7 DAY;
+```
+
+---
+
+## 8. Suggested Index for This Query
+
+```sql
+CREATE INDEX idx_notifications_type_time
+ON notifications(notification_type, created_at);
+```
+
+This helps in:
+
+* Filtering placement notifications efficiently
+* Restricting results to recent records
+* Reducing scan time significantly
+
+---
+
+## 9. Summary
+
+The original query is functionally correct but not optimized for large-scale data. Proper indexing, selective column retrieval, and avoiding full table scans are essential for maintaining performance in a growing notification system.
